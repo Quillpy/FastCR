@@ -30,6 +30,7 @@ usage() {
   echo -e "  ${BOLD}Usage${RESET}"
   echo -e "    ${GREEN}cr${RESET} <file> [args…]   compile (if needed) and run"
   echo -e "    ${GREEN}cr${RESET} --del             delete all cr binaries in current dir"
+  echo -e "    ${GREEN}cr${RESET} --uninstall       uninstall the cr command"
   echo -e "    ${GREEN}cr${RESET} --keep <file>     run but keep the binary afterwards"
   echo -e "    ${GREEN}cr${RESET} --help | -h       show this help"
   echo -e ""
@@ -48,9 +49,10 @@ usage() {
     ".php"        "php            (interpreted)"
   echo -e ""
   echo -e "  ${BOLD}Flags${RESET}"
-  echo -e "    ${GREEN}--keep${RESET}   keep the compiled binary after running (skip delete prompt)"
-  echo -e "    ${GREEN}--del${RESET}    delete all executables/binaries in the current directory"
-  echo -e ""
+  echo -e "    ${GREEN}--keep${RESET}       keep the compiled binary after running (skip delete prompt)"
+  echo -e "    ${GREEN}--del${RESET}        delete all executables/binaries in the current directory"
+  echo -e "    ${GREEN}--uninstall${RESET}  remove the installed 'cr' command from your system"
+    echo -e ""
   echo -e "  ${BOLD}Examples${RESET}"
   echo -e "    cr main.c"
   echo -e "    cr app.py --verbose"
@@ -65,6 +67,27 @@ usage() {
   elif command -v open &>/dev/null; then
     open "https://github.com/Quillpy/FastCR/blob/main/Documentation.md" &>/dev/null &
   fi
+  exit 0
+}
+
+# --uninstall: remove installed cr command
+uninstall_cr() {
+  echo ""
+  step "Uninstalling 'cr' command…"
+  local removed=false
+  for p in "/usr/local/bin/cr" "$HOME/.local/bin/cr"; do
+    if [[ -e "$p" ]]; then
+      if [[ -w "$p" ]]; then
+        rm -f "$p" && success "Removed ${BOLD}$p${RESET}" && removed=true
+      elif command -v sudo &>/dev/null; then
+        sudo rm -f "$p" && success "Removed ${BOLD}$p${RESET}" && removed=true
+      fi
+    fi
+  done
+  if [[ "$removed" == false ]]; then
+    warn "No installed 'cr' found in common locations. Maybe you're already free."
+  fi
+  echo ""
   exit 0
 }
 
@@ -115,6 +138,7 @@ KEEP_BIN=false
 case "$1" in
   -h|--help) usage ;;
   --del)     del_binaries ;;
+  --uninstall) uninstall_cr ;;
   --keep)    KEEP_BIN=true; shift ;;
 esac
 
