@@ -1,0 +1,132 @@
+# FastCR .gitignore — because your repo deserves to be clean and shiny
+
+# OS junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+Icon?
+$RECYCLE.BIN/
+
+# Editors/IDEs
+.vscode/
+.idea/
+*.iml
+*.sw?
+*.swo
+*.swp
+*.kate-swp
+*~
+
+# Logs and temp
+*.log
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*.retry
+
+# Environment and local configs
+.env
+.env.*
+!.env.example
+.local/
+
+# Node / TypeScript
+node_modules/
+dist/
+build/
+coverage/
+.npm/
+.nvm/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+.envrc
+.mypy_cache/
+.dmypy.json
+.pyre/
+
+'tests' cache
+.cache/
+
+# Java / Kotlin
+*.class
+*.jar
+*.war
+*.ear
+out/
+.gradle/
+build/
+.target/
+
+# C / C++ / Obj-C
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.out
+*.exe
+*.app
+*.dSYM/
+
+# Go
+bin/
+*.exe
+*.test
+
+# Rust
+/target/
+**/target/
+Cargo.lock
+
+# PHP / Composer
+vendor/
+composer.lock
+
+# Ruby
+.bundle/
+vendor/bundle/
+
+# Shell
+*.sh.tmp
+
+# PowerShell
+*.ps1.tmp
+*.psd1
+*.psm1
+
+# General archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Images generated locally (keep source ones you commit explicitly)
+*.png
+*.gif
+*.jpg
+*.jpeg
+!demo/**
+
+# Test artifacts
+/tests/.tmp_del/
+
+# OS-specific executables (keep sources!)
+# Note: FastCR binaries often have no extension on Linux/macOS; store them outside VCS.
+# We can’t match “files without extensions” easily, so prefer using a bin/ or build/ folder for binaries.
+
+# Qodo workspace
+.qodo/
