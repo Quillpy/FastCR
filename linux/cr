@@ -60,13 +60,6 @@ usage() {
   echo -e "    cr --keep server.rs"
   echo -e "    cr --del"
   echo -e ""
-
-  # Best-effort open browser
-  if command -v xdg-open &>/dev/null; then
-    xdg-open "https://github.com/Quillpy/FastCR/blob/main/Documentation.md" &>/dev/null &
-  elif command -v open &>/dev/null; then
-    open "https://github.com/Quillpy/FastCR/blob/main/Documentation.md" &>/dev/null &
-  fi
   exit 0
 }
 
