@@ -57,8 +57,8 @@ Pick your operating system. We won’t judge. Much.
 ### Linux/macOS
 
 ```bash
-git clone https://github.com/Quillpy/Fastcc.git
-cd Fastcc/linux
+git clone https://github.com/Quillpy/Fastcr.git
+cd Fastcr/linux
 chmod +x install.sh
 ./install.sh
 ```
@@ -80,8 +80,8 @@ sudo cp cr /usr/local/bin/cr
 
 Open PowerShell and run:
 ```powershell
-git clone https://github.com/Quillpy/Fastcc.git
-cd Fastcc\windows
+git clone https://github.com/Quillpy/Fastcr.git
+cd Fastcr\windows
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 This installs cr.ps1 and a handy cr.cmd shim so you can just type cr like a boss.
