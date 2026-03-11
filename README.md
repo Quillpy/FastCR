@@ -61,6 +61,7 @@ git clone https://github.com/Quillpy/Fastcr.git
 cd Fastcr/linux
 chmod +x install.sh
 ./install.sh
+chmod +x cr
 ```
 
 The installer places `cr` in `/usr/local/bin` (or `~/.local/bin` if you don't have root). It also scans your toolchain and roasts your missing compilers politely.
