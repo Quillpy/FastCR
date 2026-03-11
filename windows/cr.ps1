@@ -16,7 +16,8 @@ param(
 
     [switch]$Keep,
     [switch]$Del,
-    [switch]$Help
+    [switch]$Help,
+    [switch]$Bench
 )
 
 # ══════════════════════════════════════════════════════════════
@@ -139,6 +140,7 @@ function Show-Usage {
     Write-Dim   "    cr <file> [args...]   compile (if needed) and run"
     Write-Dim   "    cr --del              delete all .exe binaries in current dir"
     Write-Dim   "    cr --keep <file>      run but keep the binary afterwards"
+    Write-Dim   "    cr --bench <file>     benchmark compile/run time and memory (C/C++/Rust)"
     Write-Dim   "    cr --help             show this help"
     Write-Host ""
     Write-Host "  " -NoNewline; Write-Host "Supported languages" -ForegroundColor White
@@ -166,6 +168,8 @@ function Show-Usage {
     Write-Host "   keep the compiled binary after running"
     Write-Host "    " -NoNewline; Write-Host "--del " -ForegroundColor Green -NoNewline
     Write-Host "   delete all .exe files in the current directory"
+    Write-Host "    " -NoNewline; Write-Host "--bench" -ForegroundColor Green -NoNewline
+    Write-Host "   benchmark compile/run time and memory (C/C++/Rust)"
     Write-Host ""
     Write-Host "  " -NoNewline; Write-Host "Examples" -ForegroundColor White
     Write-Dim   "    cr main.c"
@@ -270,6 +274,60 @@ function Invoke-Compiled {
     exit $runExit
 }
 
+# Benchmark for compiled languages (C/C++/Rust)
+function Invoke-CompiledBench {
+    param(
+        [string]   $Compiler,
+        [string[]] $Flags,
+        [string]   $SourceFile,
+        [string]   $OutBin,
+        [string[]] $RunArgs
+    )
+
+    Assert-Tool $Compiler
+
+    # Compile timing
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $compileArgs = $Flags + @("-o", $OutBin, $SourceFile)
+    & $Compiler @compileArgs 2>&1
+    $compileExit = $LASTEXITCODE
+    $sw.Stop()
+    $compileMs = [math]::Round($sw.Elapsed.TotalMilliseconds)
+    if ($compileExit -ne 0) {
+        Write-CrError "Compilation failed. Fix the errors above and retry."
+    }
+
+    # Run timing + memory
+    $outTmp = [System.IO.Path]::GetTempFileName()
+    $errTmp = [System.IO.Path]::GetTempFileName()
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $p = Start-Process -FilePath $OutBin -ArgumentList $RunArgs -PassThru -Wait -RedirectStandardOutput $outTmp -RedirectStandardError $errTmp
+    $sw.Stop()
+    $runMs = [math]::Round($sw.Elapsed.TotalMilliseconds)
+    $runExit = $p.ExitCode
+    $peak = $p.PeakWorkingSet64  # bytes
+    Remove-Item -Force $outTmp,$errTmp -ErrorAction SilentlyContinue
+
+    if (-not $keepBin) { Remove-Item -Force $OutBin -ErrorAction SilentlyContinue }
+
+    # Print results
+    $cSec = [string]::Format("{0:N2}", ($compileMs/1000.0))
+    $rSec = [string]::Format("{0:N2}", ($runMs/1000.0))
+    Write-Host "Compile time: ${cSec}s" 
+    Write-Host "Runtime: ${rSec}s"
+    if ($peak -gt 0) {
+        $memMB = [int][math]::Round($peak / 1MB)
+        if ($memMB -lt 1) {
+            $memKB = [int][math]::Round($peak / 1KB)
+            Write-Host "Memory usage: ${memKB}KB"
+        } else {
+            Write-Host "Memory usage: ${memMB}MB"
+        }
+    }
+
+    exit $runExit
+}
+
 # ══════════════════════════════════════════════════════════════
 #  Interpreted language runner
 # ══════════════════════════════════════════════════════════════
@@ -317,6 +375,15 @@ if ($sourceFile -eq "--keep") {
     $ExtraArgs    = $ExtraArgs[1..($ExtraArgs.Count - 1)]
 }
 
+# Support --bench as first positional too
+$doBench = $Bench
+if ($sourceFile -eq "--bench") {
+    $doBench = $true
+    if ($ExtraArgs.Count -eq 0) { Show-Usage }
+    $sourceFile   = $ExtraArgs[0]
+    $ExtraArgs    = $ExtraArgs[1..($ExtraArgs.Count - 1)]
+}
+
 if (-not (Test-Path $sourceFile)) {
     Write-CrError "File not found: '$sourceFile'"
 }
@@ -349,19 +416,35 @@ Write-Host ""
 switch ($ext) {
 
     "c" {
-        Invoke-Compiled -Compiler "gcc" `
-                        -Flags @("-Wall", "-Wextra", "-O2") `
-                        -SourceFile $sourceFile `
-                        -OutBin $outBin `
-                        -RunArgs $ExtraArgs
+        if ($doBench) {
+            Invoke-CompiledBench -Compiler "gcc" `
+                                 -Flags @("-Wall", "-Wextra", "-O2") `
+                                 -SourceFile $sourceFile `
+                                 -OutBin $outBin `
+                                 -RunArgs $ExtraArgs
+        } else {
+            Invoke-Compiled -Compiler "gcc" `
+                            -Flags @("-Wall", "-Wextra", "-O2") `
+                            -SourceFile $sourceFile `
+                            -OutBin $outBin `
+                            -RunArgs $ExtraArgs
+        }
     }
 
     { $_ -in "cpp","cc","cxx" } {
-        Invoke-Compiled -Compiler "g++" `
-                        -Flags @("-Wall", "-Wextra", "-O2", "-std=c++17") `
-                        -SourceFile $sourceFile `
-                        -OutBin $outBin `
-                        -RunArgs $ExtraArgs
+        if ($doBench) {
+            Invoke-CompiledBench -Compiler "g++" `
+                                 -Flags @("-Wall", "-Wextra", "-O2", "-std=c++17") `
+                                 -SourceFile $sourceFile `
+                                 -OutBin $outBin `
+                                 -RunArgs $ExtraArgs
+        } else {
+            Invoke-Compiled -Compiler "g++" `
+                            -Flags @("-Wall", "-Wextra", "-O2", "-std=c++17") `
+                            -SourceFile $sourceFile `
+                            -OutBin $outBin `
+                            -RunArgs $ExtraArgs
+        }
     }
 
     "java" {
@@ -416,11 +499,19 @@ switch ($ext) {
     }
 
     "rs" {
-        Invoke-Compiled -Compiler "rustc" `
-                        -Flags @() `
-                        -SourceFile $sourceFile `
-                        -OutBin $outBin `
-                        -RunArgs $ExtraArgs
+        if ($doBench) {
+            Invoke-CompiledBench -Compiler "rustc" `
+                                 -Flags @() `
+                                 -SourceFile $sourceFile `
+                                 -OutBin $outBin `
+                                 -RunArgs $ExtraArgs
+        } else {
+            Invoke-Compiled -Compiler "rustc" `
+                            -Flags @() `
+                            -SourceFile $sourceFile `
+                            -OutBin $outBin `
+                            -RunArgs $ExtraArgs
+        }
     }
 
     "go" {

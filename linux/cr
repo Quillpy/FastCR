@@ -32,6 +32,7 @@ usage() {
   echo -e "    ${GREEN}cr${RESET} --del             delete all cr binaries in current dir"
   echo -e "    ${GREEN}cr${RESET} --uninstall       uninstall the cr command"
   echo -e "    ${GREEN}cr${RESET} --keep <file>     run but keep the binary afterwards"
+  echo -e "    ${GREEN}cr${RESET} --bench <file>    benchmark compile/run time and memory (C/C++/Rust)"
   echo -e "    ${GREEN}cr${RESET} --help | -h       show this help"
   echo -e ""
   echo -e "  ${BOLD}Supported languages${RESET}"
@@ -52,12 +53,14 @@ usage() {
   echo -e "    ${GREEN}--keep${RESET}       keep the compiled binary after running (skip delete prompt)"
   echo -e "    ${GREEN}--del${RESET}        delete all executables/binaries in the current directory"
   echo -e "    ${GREEN}--uninstall${RESET}  remove the installed 'cr' command from your system"
+  echo -e "    ${GREEN}--bench${RESET}       benchmark compile/run time and memory (C/C++/Rust)"
     echo -e ""
   echo -e "  ${BOLD}Examples${RESET}"
   echo -e "    cr main.c"
   echo -e "    cr app.py --verbose"
   echo -e "    cr Main.java arg1 arg2"
   echo -e "    cr --keep server.rs"
+  echo -e "    cr --bench main.cpp"
   echo -e "    cr --del"
   echo -e ""
   exit 0
@@ -127,13 +130,15 @@ del_binaries() {
 [[ $# -eq 0 ]] && usage
 
 KEEP_BIN=false
+BENCH=false
 
 case "$1" in
   -h|--help) usage ;;
   --del)     del_binaries ;;
   --uninstall) uninstall_cr ;;
   --keep)    KEEP_BIN=true; shift ;;
-esac
+  --bench)   BENCH=true; shift ;;
+	esac
 
 [[ $# -eq 0 ]] && usage
 
@@ -226,6 +231,78 @@ compiled_run() {
   exit "$code"
 }
 
+#  Benchmark for compiled languages (C/C++/Rust)
+compiled_bench() {
+  local compiler="$1"; shift
+  need "$compiler"
+  # Compile timing
+  _time_start
+  if "$compiler" "$@" -o "$OUTBIN" "$FILE"; then
+    local c_ms; c_ms=$(_time_end)
+  else
+    error "Compilation failed. Fix the errors above and retry."
+  fi
+
+  # Runtime timing and memory via time command
+  local time_cmd=""; local has_v=false
+  if command -v /usr/bin/time >/dev/null 2>&1; then
+    time_cmd="/usr/bin/time"
+  elif command -v /bin/time >/dev/null 2>&1; then
+    time_cmd="/bin/time"
+  elif command -v time >/dev/null 2>&1; then
+    time_cmd="time"
+  fi
+
+  local r_sec=0 mem_kb=""
+  if [[ -n "$time_cmd" ]]; then
+    # Try verbose first to parse "Maximum resident set size"
+    local tmp_out tmp_err
+    tmp_out=$(mktemp) ; tmp_err=$(mktemp)
+    _time_start
+    "$time_cmd" -v "$OUTBIN" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}" >"$tmp_out" 2>"$tmp_err"
+    local run_code=$?
+    local r_ms; r_ms=$(_time_end)
+    r_sec=$(awk -v ms="$r_ms" 'BEGIN{printf "%.2f", ms/1000.0}')
+    if grep -q "Maximum resident set size" "$tmp_err" 2>/dev/null; then
+      mem_kb=$(grep -m1 "Maximum resident set size" "$tmp_err" | awk '{print $6}')
+    else
+      # Fallback to format output in KB
+      : >"$tmp_err"
+      _time_start
+      "$time_cmd" -f "%M" "$OUTBIN" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}" >"$tmp_out" 2>"$tmp_err"
+      run_code=$?
+      r_ms=$(_time_end)
+      r_sec=$(awk -v ms="$r_ms" 'BEGIN{printf "%.2f", ms/1000.0}')
+      mem_kb=$(cat "$tmp_err" | tail -n1)
+    fi
+    rm -f "$tmp_out" "$tmp_err"
+    # Do not prompt on bench; delete unless kept
+    if [[ "$KEEP_BIN" != true ]]; then rm -f "$OUTBIN"; fi
+  else
+    # No time utility: measure time only, no memory
+    _time_start
+    "$OUTBIN" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+    local run_code=$?
+    local r_ms; r_ms=$(_time_end)
+    r_sec=$(awk -v ms="$r_ms" 'BEGIN{printf "%.2f", ms/1000.0}')
+    if [[ "$KEEP_BIN" != true ]]; then rm -f "$OUTBIN"; fi
+  fi
+
+  # Print results
+  local c_sec; c_sec=$(awk -v ms="$c_ms" 'BEGIN{printf "%.2f", ms/1000.0}')
+  echo "Compile time: ${c_sec}s"
+  echo "Runtime: ${r_sec}s"
+  if [[ -n "$mem_kb" && "$mem_kb" =~ ^[0-9]+$ ]]; then
+    local mem_mb; mem_mb=$(awk -v k="$mem_kb" 'BEGIN{printf "%.0f", k/1024.0}')
+    if [[ "$mem_mb" -lt 1 ]]; then
+      echo "Memory usage: ${mem_kb}KB"
+    else
+      echo "Memory usage: ${mem_mb}MB"
+    fi
+  fi
+  exit ${run_code:-0}
+}
+
 #  Interpreted language runner
 
 interpreted_run() {
@@ -247,11 +324,11 @@ interpreted_run() {
 case "$EXT" in
 
   c)
-    compiled_run gcc -Wall -Wextra -O2
+    if [[ "$BENCH" == true ]]; then compiled_bench gcc -Wall -Wextra -O2; else compiled_run gcc -Wall -Wextra -O2; fi
     ;;
 
   cpp|cc|cxx)
-    compiled_run g++ -Wall -Wextra -O2 -std=c++17
+    if [[ "$BENCH" == true ]]; then compiled_bench g++ -Wall -Wextra -O2 -std=c++17; else compiled_run g++ -Wall -Wextra -O2 -std=c++17; fi
     ;;
 
   java)
@@ -292,7 +369,7 @@ case "$EXT" in
     ;;
 
   rs)
-    compiled_run rustc
+    if [[ "$BENCH" == true ]]; then compiled_bench rustc; else compiled_run rustc; fi
     ;;
 
   go)   interpreted_run go run ;;
