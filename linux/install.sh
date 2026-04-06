@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+<<<<<<< HEAD
 #  FastCR Installer  –  Because life's too short to type
 #                        "gcc -o main main.c && ./main" again.
 #  https://github.com/Quillpy/Fastcc
@@ -304,3 +305,33 @@ bigdiv
 blank
 println "  ${DIM}FastCR  •  https://github.com/Quillpy/Fastcc${RESET}"
 blank
+=======
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -w /usr/local/bin ]]; then
+    INSTALL_DIR="/usr/local/bin"
+elif [[ -d "$HOME/.local/bin" ]]; then
+    INSTALL_DIR="$HOME/.local/bin"
+else
+    mkdir -p "$HOME/.local/bin"
+    INSTALL_DIR="$HOME/.local/bin"
+fi
+
+cat > "$INSTALL_DIR/cr" <<EOF
+#!/usr/bin/env bash
+exec "$SCRIPT_DIR/cr" "\$@"
+EOF
+
+chmod +x "$INSTALL_DIR/cr"
+chmod +x "$SCRIPT_DIR/cr"
+
+echo "installed: $INSTALL_DIR/cr"
+
+if [[ "$INSTALL_DIR" == "$HOME/.local/bin" ]]; then
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        echo ""
+        echo "note: add this to your shell config (~/.bashrc or ~/.zshrc):"
+        echo '  export PATH="$HOME/.local/bin:$PATH"'
+    fi
+fi
+>>>>>>> 5bf1a66 (Clean Codebase)
