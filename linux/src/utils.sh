@@ -4,6 +4,12 @@ cmd_new() {
     local file="$1"
     local ext="${file##*.}"
 
+    local dir
+    dir="$(dirname "$file")"
+    if [[ "$dir" != "." && ! -d "$dir" ]]; then
+        mkdir -p "$dir"
+    fi
+
     [[ -f "$file" ]] && { echo "error: file already exists: $file"; exit 1; }
 
     case "$ext" in
@@ -126,6 +132,46 @@ main = do
     return ()
 EOF
             ;;
+        ts)
+            cat > "$file" <<'EOF'
+import * as fs from 'fs';
+
+const input = fs.readFileSync('/dev/stdin', 'utf8').trim().split('\n');
+let idx = 0;
+
+function readline(): string { return input[idx++]; }
+
+function main(): void {
+}
+
+main();
+EOF
+            ;;
+        sh)
+            cat > "$file" <<'EOF'
+#!/usr/bin/env bash
+
+main() {
+
+}
+
+main "$@"
+EOF
+            ;;
+        php)
+            cat > "$file" <<'EOF'
+<?php
+
+$handle = fopen("php://stdin", "r");
+
+function readline_input($h) {
+    return trim(fgets($h));
+}
+
+$stdin = fopen("php://stdin", "r");
+
+EOF
+            ;;
         *)
             echo "error: no template for extension: .$ext"
             exit 1
@@ -141,17 +187,44 @@ cmd_del() {
     if [[ "$target" == "*" ]]; then
         local count=0
         for bin in .fastcr_*; do
-            [[ -f "$bin" ]] && rm -f "$bin" && (( count++ ))
+            [[ -e "$bin" ]] && rm -rf "$bin" && count=$(( count + 1 ))
+        done
+        for d in .fastcr_*_java; do
+            [[ -d "$d" ]] && rm -rf "$d" && count=$(( count + 1 ))
+        done
+        for d in .fastcr_*_hs; do
+            [[ -d "$d" ]] && rm -rf "$d" && count=$(( count + 1 ))
         done
         echo "deleted $count binaries"
     else
         local base="${target%.*}"
         local dir
         dir="$(dirname "$target")"
-        local bin="$dir/.fastcr_${base##*/}"
+        local basename_file
+        basename_file="${base##*/}"
+        local deleted=0
+        local bin="$dir/.fastcr_${basename_file}"
         if [[ -f "$bin" ]]; then
             rm -f "$bin"
-            echo "deleted: $bin"
+            deleted=$(( deleted + 1 ))
+        fi
+        local java_out="$dir/.fastcr_${basename_file}_java"
+        if [[ -d "$java_out" ]]; then
+            rm -rf "$java_out"
+            deleted=$(( deleted + 1 ))
+        fi
+        local hs_out="$dir/.fastcr_${basename_file}_hs"
+        if [[ -d "$hs_out" ]]; then
+            rm -rf "$hs_out"
+            deleted=$(( deleted + 1 ))
+        fi
+        local jar="$dir/.fastcr_${basename_file}.jar"
+        if [[ -f "$jar" ]]; then
+            rm -f "$jar"
+            deleted=$(( deleted + 1 ))
+        fi
+        if [[ $deleted -gt 0 ]]; then
+            echo "deleted $deleted artifact(s) for: $target"
         else
             echo "no binary found for: $target"
         fi

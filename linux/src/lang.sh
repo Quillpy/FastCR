@@ -11,7 +11,9 @@ detect_lang() {
     local base="${file%.*}"
     local dir
     dir="$(dirname "$file")"
-    BINARY="$dir/.fastcr_${base##*/}"
+    local basename_file
+    basename_file="${base##*/}"
+    BINARY="$dir/.fastcr_${basename_file}"
 
     case "$ext" in
         c)
@@ -34,13 +36,14 @@ detect_lang() {
             ;;
         java)
             LANG_ID="java"
-            BINARY="$dir"
             local classname
             classname="$(grep -m1 'public class' "$file" | sed 's/.*public class \([A-Za-z0-9_]*\).*/\1/')"
-            [[ -z "$classname" ]] && classname="${base##*/}"
-            COMPILE_CMD="javac -d $BINARY $file"
-            RUN_CMD="java -cp $BINARY $classname"
-            BINARY="$dir/${classname}.class"
+            [[ -z "$classname" ]] && classname="${basename_file}"
+            local java_out="$dir/.fastcr_${basename_file}_java"
+            mkdir -p "$java_out"
+            COMPILE_CMD="javac -d $java_out $file"
+            RUN_CMD="java -cp $java_out $classname"
+            BINARY="$java_out"
             ;;
         py)
             LANG_ID="python"
@@ -55,7 +58,7 @@ detect_lang() {
         rs)
             LANG_ID="rust"
             if [[ -n "$OPT_DEBUG" ]]; then
-                COMPILE_CMD="rustc -o $BINARY $file"
+                COMPILE_CMD="rustc -g -o $BINARY $file"
             else
                 COMPILE_CMD="rustc -C opt-level=2 -o $BINARY $file"
             fi
@@ -68,7 +71,7 @@ detect_lang() {
             ;;
         kt)
             LANG_ID="kotlin"
-            local jarfile="${BINARY}.jar"
+            local jarfile="$dir/.fastcr_${basename_file}.jar"
             COMPILE_CMD="kotlinc $file -include-runtime -d $jarfile"
             RUN_CMD="java -jar $jarfile"
             BINARY="$jarfile"
@@ -87,14 +90,59 @@ detect_lang() {
             ;;
         hs)
             LANG_ID="haskell"
-            COMPILE_CMD="ghc -O2 -o $BINARY $file -outputdir /tmp/fastcr_hs"
+            local hs_tmp="$dir/.fastcr_${basename_file}_hs"
+            mkdir -p "$hs_tmp"
+            COMPILE_CMD="ghc -O2 -o $BINARY $file -outputdir $hs_tmp"
             RUN_CMD="$BINARY"
+            ;;
+        ts)
+            LANG_ID="typescript"
+            COMPILE_CMD=""
+            RUN_CMD="ts-node $file"
+            BINARY=""
+            ;;
+        sh)
+            LANG_ID="shell"
+            COMPILE_CMD=""
+            RUN_CMD="bash $file"
+            BINARY=""
+            ;;
+        php)
+            LANG_ID="php"
+            COMPILE_CMD=""
+            RUN_CMD="php $file"
+            BINARY=""
             ;;
         *)
             echo "error: unsupported extension: .$ext"
             exit 1
             ;;
     esac
+}
+
+check_compiler() {
+    local cmd
+    case "$LANG_ID" in
+        c)      cmd="gcc" ;;
+        cpp)    cmd="g++" ;;
+        java)   cmd="javac" ;;
+        python) cmd="python3"; command -v pypy3 &>/dev/null && cmd="pypy3" ;;
+        rust)   cmd="rustc" ;;
+        go)     cmd="go" ;;
+        kotlin) cmd="kotlinc" ;;
+        js)     cmd="node" ;;
+        rb)     cmd="ruby" ;;
+        hs)     cmd="ghc" ;;
+        ts)     cmd="ts-node" ;;
+        shell)  cmd="bash" ;;
+        php)    cmd="php" ;;
+        *)      return 0 ;;
+    esac
+    if ! command -v "$cmd" &>/dev/null; then
+        echo "error: $cmd is not installed"
+        return 1
+    fi
+    return 0
 }
 
 compile_file() {

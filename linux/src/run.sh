@@ -1,10 +1,30 @@
 #!/usr/bin/env bash
 
 STATS_FILE="/tmp/fastcr_last_stats"
+FASTCR_TMP=""
+
+init_tmp() {
+    FASTCR_TMP=$(mktemp /tmp/fastcr.XXXXXX)
+}
+
+cleanup_tmp() {
+    rm -f "$FASTCR_TMP" 2>/dev/null
+}
 
 _ms_from_timelimit() {
     local tl="$OPT_TIMELIMIT"
     printf "%d.%03d" $(( tl / 1000 )) $(( tl % 1000 ))
+}
+
+_build_run_cmd() {
+    local cmd="$RUN_CMD"
+    if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
+        cmd="$cmd"
+        for arg in "${EXTRA_ARGS[@]}"; do
+            cmd="$cmd \"$arg\""
+        done
+    fi
+    echo "$cmd"
 }
 
 _run_once() {
@@ -19,21 +39,24 @@ _run_once() {
     local start_ns end_ns
     start_ns=$(date +%s%N)
 
+    local run_cmd
+    run_cmd=$(_build_run_cmd)
+
     if [[ -f /usr/bin/time ]]; then
         if [[ -n "$input_file" ]]; then
-            /usr/bin/time -v timeout "$tl_sec" bash -c "$RUN_CMD" \
-                < "$input_file" > "$capture_file" 2>/tmp/fastcr_timeinfo
+            /usr/bin/time -v timeout "$tl_sec" bash -c "$run_cmd" \
+                < "$input_file" > "$capture_file" 2>"$FASTCR_TMP"
         else
-            /usr/bin/time -v timeout "$tl_sec" bash -c "$RUN_CMD" \
-                > "$capture_file" 2>/tmp/fastcr_timeinfo
+            /usr/bin/time -v timeout "$tl_sec" bash -c "$run_cmd" \
+                > "$capture_file" 2>"$FASTCR_TMP"
         fi
         exit_code=$?
         end_ns=$(date +%s%N)
 
         local raw_elapsed raw_mem
-        raw_elapsed=$(grep "Elapsed (wall clock)" /tmp/fastcr_timeinfo 2>/dev/null \
+        raw_elapsed=$(grep "Elapsed (wall clock)" "$FASTCR_TMP" 2>/dev/null \
             | grep -oP '\d+:\d+\.\d+' | head -1)
-        raw_mem=$(grep "Maximum resident" /tmp/fastcr_timeinfo 2>/dev/null \
+        raw_mem=$(grep "Maximum resident" "$FASTCR_TMP" 2>/dev/null \
             | grep -oP '\d+' | tail -1)
 
         if [[ -n "$raw_elapsed" ]]; then
@@ -54,9 +77,9 @@ _run_once() {
         fi
     else
         if [[ -n "$input_file" ]]; then
-            timeout "$tl_sec" bash -c "$RUN_CMD" < "$input_file" > "$capture_file"
+            timeout "$tl_sec" bash -c "$run_cmd" < "$input_file" > "$capture_file"
         else
-            timeout "$tl_sec" bash -c "$RUN_CMD" > "$capture_file"
+            timeout "$tl_sec" bash -c "$run_cmd" > "$capture_file"
         fi
         exit_code=$?
         end_ns=$(date +%s%N)
@@ -84,7 +107,9 @@ run_file() {
     if [[ $exit_code -eq 124 ]]; then
         echo ""
         echo "TLE  exceeded ${OPT_TIMELIMIT} ms"
-        rm -f "$capture_file" /tmp/fastcr_timeinfo
+        echo "${OPT_TIMELIMIT}+ ms  ? MB" > "$STATS_FILE"
+        rm -f "$capture_file"
+        cleanup_tmp
         return
     fi
 
@@ -92,7 +117,9 @@ run_file() {
         cat "$capture_file"
         echo ""
         echo "RTE  exit code $exit_code"
-        rm -f "$capture_file" /tmp/fastcr_timeinfo
+        echo "$elapsed_ms ms  $mem_mb MB" > "$STATS_FILE"
+        rm -f "$capture_file"
+        cleanup_tmp
         return
     fi
 
@@ -124,12 +151,15 @@ run_file() {
     fi
 
     echo "${elapsed_ms} ms  ${mem_mb} MB" > "$STATS_FILE"
-    rm -f "$capture_file" /tmp/fastcr_timeinfo
+    rm -f "$capture_file"
+    cleanup_tmp
 }
 
 run_batch() {
-    local tests
-    mapfile -t tests < <(ls test*.txt 2>/dev/null | sort -V)
+    local tests=()
+    for f in test*.txt; do
+        [[ -f "$f" ]] && tests+=("$f")
+    done
 
     if [[ ${#tests[@]} -eq 0 ]]; then
         echo "no test files found (test*.txt)"
@@ -162,21 +192,21 @@ run_batch() {
             verdict="TLE"
             elapsed_ms="${OPT_TIMELIMIT}+"
             mem_mb="--"
-            (( failed++ ))
+            failed=$(( failed + 1 ))
         elif [[ $exit_code -ne 0 ]]; then
             verdict="RTE"
-            (( failed++ ))
+            failed=$(( failed + 1 ))
         elif [[ -n "$expected" ]]; then
             if diff -q "$capture_file" "$expected" &>/dev/null; then
                 verdict="AC"
-                (( passed++ ))
+                passed=$(( passed + 1 ))
             else
                 verdict="WA"
-                (( failed++ ))
+                failed=$(( failed + 1 ))
             fi
         else
             verdict="RAN"
-            (( passed++ ))
+            passed=$(( passed + 1 ))
         fi
 
         printf "  %-22s  %-4s  %6s ms  %s MB\n" \
@@ -189,5 +219,5 @@ run_batch() {
     echo "  Passed: $passed   Failed: $failed"
     echo ""
 
-    rm -f /tmp/fastcr_timeinfo
+    cleanup_tmp
 }
