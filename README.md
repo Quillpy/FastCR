@@ -13,8 +13,8 @@ Detects your language, compiles, runs, and shows time + memory. No configuration
 ## Install
 
 ```bash
-git clone https://github.com/Quillpy/fastcr
-cd fastcr
+git clone https://github.com/Quillpy/FastCR    
+cd FastCR/linux
 chmod +x install.sh
 ./install.sh
 ```
