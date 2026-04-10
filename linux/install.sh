@@ -1,38 +1,29 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CR_SRC="$SCRIPT_DIR/cr"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-[[ -f "$CR_SRC" ]] || { echo "error: missing 'cr' script"; exit 1; }
-
+TARGET_DIR=""
 if [[ -w "/usr/local/bin" ]]; then
-    DEST="/usr/local/bin/cr"
-    USE_SUDO=false
-elif command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
-    DEST="/usr/local/bin/cr"
-    USE_SUDO=true
+    TARGET_DIR="/usr/local/bin"
 else
-    DEST="$HOME/.local/bin/cr"
-    mkdir -p "$HOME/.local/bin"
-    USE_SUDO=false
+    TARGET_DIR="$HOME/.local/bin"
+    mkdir -p "$TARGET_DIR"
 fi
 
-echo "Installing to $DEST"
+gcc -O2 -o "${SCRIPT_DIR}/src/meminfo" "${SCRIPT_DIR}/src/meminfo.c"
 
-if [[ "$USE_SUDO" == true ]]; then
-    sudo cp "$CR_SRC" "$DEST"
-    sudo chmod +x "$DEST"
-else
-    cp "$CR_SRC" "$DEST"
-    chmod +x "$DEST"
-fi
+cp "${SCRIPT_DIR}/cr.sh" "${TARGET_DIR}/cr"
+chmod +x "${TARGET_DIR}/cr"
+cp "${SCRIPT_DIR}/src/meminfo" "${TARGET_DIR}/meminfo"
+chmod +x "${TARGET_DIR}/meminfo"
 
-echo "Installed successfully"
-
-if [[ "$DEST" == "$HOME/.local/bin/cr" ]]; then
-    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-        echo "Add this to your shell config:"
-        echo 'export PATH="$HOME/.local/bin:$PATH"'
+if [[ "$TARGET_DIR" != "/usr/local/bin" ]]; then
+    if ! echo "$PATH" | grep -q "$TARGET_DIR"; then
+        echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$HOME/.bashrc"
+        echo "Added $TARGET_DIR to PATH in ~/.bashrc"
     fi
 fi
+
+echo "FastCR installed to ${TARGET_DIR}/cr"
+echo "Run: cr solution.cpp"
