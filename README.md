@@ -12,6 +12,8 @@ Because typing `g++ solution.cpp -O2 -std=c++17 && ./a.out` repeatedly builds ch
 
 ## Why FastCR?
 
+![logo](./logo.png)
+
 FastCR exists so you can:
 
 - Compile faster 🚀
