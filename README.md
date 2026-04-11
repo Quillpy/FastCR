@@ -1,4 +1,4 @@
-# FastCR ⚡
+# FastCR ⚡ (BETA)
 
 *A fast, minimal, no-nonsense (okay maybe a little nonsense) **Linux-only** competitive programming tool.*
 
