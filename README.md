@@ -32,8 +32,10 @@ But at least **you'll lose efficiently**.
 - Batch testing with `test*.txt` / `test*.out`
 - Watch mode (because saving files manually is too mainstream)
 - New file boilerplate generator
+- Template-based file creation
 - Clipboard copy support
-- Zero config required
+- Config file support for customization
+- Zero config required (works out of the box)
 
 Install → run → solve → AC → celebrate.
 
@@ -41,7 +43,7 @@ Install → run → solve → AC → celebrate.
 
 ---
 
-## Quick Install (Local Repo)
+## Quick Install
 
 ```bash
 cd /path/to/FastCR/linux
@@ -67,14 +69,19 @@ Unlike your WA verdict.
 
 ```bash
 cd linux
-gcc -O2 -o meminfo src/meminfo.c
-cp cr.sh meminfo ./
+chmod +x cr.sh
 ```
 
 Run locally:
 
 ```bash
-./cr solution.cpp
+./cr.sh solution.cpp
+```
+
+Or create an alias:
+
+```bash
+alias cr="/path/to/FastCR/linux/cr.sh"
 ```
 
 Minimal effort. Maximum productivity. Slightly increased ego.
@@ -107,8 +114,91 @@ cr [flags] <file>
 | `--w` | Watch mode |
 | `--cp` | Copy source to clipboard |
 | `--del <file>` / `--del *` | Cleanup binaries |
+| `--config <action>` | Config file: create, edit, show |
+| `--uninstall` | Uninstall FastCR |
+| `--template <file>` | Create file from template |
+| `--help` / `-h` | Show help message |
+| `--version` | Show version info |
 
 Basically everything you need during contests except extra time.
+
+---
+
+## Config File
+
+FastCR supports a config file to set default values for flags.
+
+**Location:** `~/.config/fastcr/config.conf`
+
+### Create config file:
+```bash
+cr --config create
+```
+
+### Edit config file:
+```bash
+cr --config edit
+```
+
+### Show config file:
+```bash
+cr --config show
+```
+
+### Config options:
+```bash
+# Time limit in milliseconds (default: 2000)
+TL=2000
+
+# Memory limit in MB (default: 256)
+ML=256
+
+# Verbose compile output (0 or 1)
+VERBOSE=0
+
+# Show timing stats (0 or 1)
+TM=0
+
+# Debug mode with sanitizers (0 or 1)
+DEBUG=0
+
+# Default input file
+INPUT_FILE=
+
+# Default expected output file
+EXPECTED_FILE=
+
+# Default output file
+OUTPUT_FILE=
+
+# Batch test mode (0 or 1)
+BATCH=0
+
+# Watch mode (0 or 1)
+WATCH=0
+```
+
+Command-line flags override config file values.
+
+---
+
+## Templates
+
+FastCR can create new files from templates located in `linux/Templates/`.
+
+### Add templates:
+Place template files with naming convention `main.<ext>`:
+- `main.cpp` - C++ template
+- `main.py` - Python template
+- `main.c` - C template
+- etc.
+
+### Use template:
+```bash
+cr --template newfile.cpp
+```
+
+This creates `newfile.cpp` using the `main.cpp` template.
 
 ---
 
@@ -183,6 +273,9 @@ cr --d sol.cpp
 cr --n prob.cpp
 cr --w --t sol.py
 cr --del *
+cr --config edit
+cr --template newfile.cpp
+cr --uninstall
 ```
 
 Pro tip:
@@ -211,22 +304,28 @@ Now FastCR watches your file like a strict contest judge watching for hacks.
 
 ## Uninstall
 
-Check install location:
+### Recommended (using built-in flag):
+```bash
+cr --uninstall
+```
 
+This will detect your installation location and guide you through uninstallation.
+
+### Manual uninstall:
+
+Check install location:
 ```bash
 which cr
 ```
 
 If installed globally:
-
 ```bash
-sudo rm /usr/local/bin/{cr,meminfo}
+sudo rm /usr/local/bin/{cr,meminfo,Templates}
 ```
 
 If installed locally:
-
 ```bash
-rm ~/.local/bin/{cr,meminfo}
+rm -rf ~/.local/bin/{cr,meminfo,Templates} ~/.config/fastcr
 ```
 
 FastCR will leave silently.
@@ -243,31 +342,35 @@ Unlike runtime errors.
 | Watch mode fails | Install `inotify-tools` |
 | Permission denied | Use `~/.local/bin` |
 | Java/Kotlin leftovers | `cr --del *` |
+| Config not loading | Check `~/.config/fastcr/config.conf` exists |
 
-Dependencies:
+### Dependencies:
 
 - gcc
 - g++
 - language runtimes
 
-Optional:
+### Optional:
 
-- inotify-tools
-- xclip or xsel
+- inotify-tools (for watch mode)
+- xclip or xsel (for clipboard)
+- nano/vim/vscode (for config editing)
 
 ---
 
-## Contributors 👨‍💻
+## Project Structure
 
-Big thanks to the legends who helped make FastCR faster:
-
-- [**Shubham**](https://github.com/Quillpy) — Creator and maintainer
-- [**Tacoblude**](https://github.com/Tacoblude) — Contributor and bug hunter  
-- [**Cloude Code**](https://github.com/anthropics/claude-code) — Contributor, automation enhancer and script writer
-
-Want your name here too?
-Break something. Fix something. Improve something.
-Open a PR.
+```
+FastCR/
+├── README.md
+├── linux/
+│   ├── cr.sh           # Main script
+│   ├── install.sh       # Installer
+│   ├── Templates/       # File templates
+│   │   └── main.cpp     # C++ template
+│   └── src/
+│       └── meminfo.c    # Memory info utility
+```
 
 ---
 
@@ -282,34 +385,6 @@ Win contests with it.
 
 ---
 
-## Development / Contributing
-
-Project structure:
-
-```
-linux/
- ├── cr.sh
- ├── meminfo.c
- └── install.sh
-
-test/
-```
-
-Ways to contribute:
-
-- Add integration tests
-- Extend language support
-- Improve memory limit handling
-- Improve signal handling
-- Optimize compilation flow
-- Add more speed (always welcome)
-
-No GitHub repo yet.
-
-Yes, this is your sign to create one 😄
-
----
-
 ## Final Motivation
 
 Fast compile.
@@ -320,4 +395,3 @@ Slowly reach AC.
 One verdict at a time.
 
 ⚡ Happy coding.
-

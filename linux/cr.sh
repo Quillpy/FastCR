@@ -1,8 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG_PATH="${HOME}/.config/fastcr/config.conf"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MEMINFO="${SCRIPT_DIR}/meminfo"
+TEMPLATE_DIR="${SCRIPT_DIR}/Templates"
 DEFAULT_TL=2000
 DEFAULT_ML=256
 
@@ -21,6 +23,19 @@ NEW_FILE=""
 WATCH=0
 CLIPBOARD=0
 DEL_TARGET=""
+CONFIG_FILE=""
+UNINSTALL=0
+TEMPLATE_FLAG=""
+HELP=0
+VERSION=0
+
+CMDLINE_SET_TL=0
+CMDLINE_SET_ML=0
+CMDLINE_SET_VERBOSE=0
+CMDLINE_SET_TM=0
+CMDLINE_SET_DEBUG=0
+CMDLINE_SET_BATCH=0
+CMDLINE_SET_WATCH=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -28,16 +43,22 @@ while [[ $# -gt 0 ]]; do
         --i)  USE_INPUT=1; INPUT_FILE="$2"; shift 2 ;;
         --o)  OUTPUT_FILE="$2"; shift 2 ;;
         --e)  EXPECTED_FILE="$2"; shift 2 ;;
-        --b)  BATCH=1; shift ;;
-        --d)  DEBUG=1; shift ;;
-        --tl) TL="$2"; shift 2 ;;
-        --ml) ML="$2"; shift 2 ;;
-        --v)  VERBOSE=1; shift ;;
-        --tm) TM=1; shift ;;
+        --b)  BATCH=1; CMDLINE_SET_BATCH=1; shift ;;
+        --d)  DEBUG=1; CMDLINE_SET_DEBUG=1; shift ;;
+        --tl) TL="$2"; CMDLINE_SET_TL=1; shift 2 ;;
+        --ml) ML="$2"; CMDLINE_SET_ML=1; shift 2 ;;
+        --v)  VERBOSE=1; CMDLINE_SET_VERBOSE=1; shift ;;
+        --tm) TM=1; CMDLINE_SET_TM=1; shift ;;
         --n)  NEW_FILE="$2"; shift 2 ;;
-        --w)  WATCH=1; shift ;;
+        --w)  WATCH=1; CMDLINE_SET_WATCH=1; shift ;;
         --cp) CLIPBOARD=1; shift ;;
         --del) DEL_TARGET="${2:-}"; shift; [[ -n "$DEL_TARGET" ]] && shift ;;
+        --config) CONFIG_FILE="$2"; shift 2 ;;
+        --uninstall) UNINSTALL=1; shift ;;
+        --template) TEMPLATE_FLAG="$2"; shift 2 ;;
+        --help) HELP=1; shift ;;
+        --version) VERSION=1; shift ;;
+        -h) HELP=1; shift ;;
         -*)   echo "Unknown flag: $1" >&2; exit 1 ;;
         *)    FILE="$1"; shift ;;
     esac
@@ -441,6 +462,212 @@ do_watch() {
     done
 }
 
+do_config() {
+    local action="$1"
+    mkdir -p "$(dirname "$CONFIG_PATH")"
+    
+    if [[ "$action" == "create" ]]; then
+        cat > "$CONFIG_PATH" << 'EOF'
+# FastCR Configuration File
+# Edit the values below to customize default behavior
+
+# Time limit in milliseconds (default: 2000)
+TL=2000
+
+# Memory limit in MB (default: 256)
+ML=256
+
+# Verbose compile output (0 or 1)
+VERBOSE=0
+
+# Show timing stats (0 or 1)
+TM=0
+
+# Debug mode with sanitizers (0 or 1)
+DEBUG=0
+
+# Default input file
+INPUT_FILE=
+
+# Default expected output file
+EXPECTED_FILE=
+
+# Default output file
+OUTPUT_FILE=
+
+# Batch test mode (0 or 1)
+BATCH=0
+
+# Watch mode (0 or 1)
+WATCH=0
+EOF
+        echo "Created default config: $CONFIG_PATH"
+        exit 0
+    fi
+    
+    if [[ ! -f "$CONFIG_PATH" ]]; then
+        echo "Config file not found: $CONFIG_PATH" >&2
+        echo "Run: cr --config create" >&2
+        exit 1
+    fi
+    
+    if [[ "$action" == "edit" ]]; then
+        if command -v nano &>/dev/null; then
+            nano "$CONFIG_PATH"
+        elif command -v vim &>/dev/null; then
+            vim "$CONFIG_PATH"
+        elif command -v code &>/dev/null; then
+            code "$CONFIG_PATH"
+        else
+            echo "No editor found. Install nano, vim, or VS Code" >&2
+            echo "Config location: $CONFIG_PATH"
+            exit 1
+        fi
+        exit 0
+    fi
+    
+    if [[ "$action" == "show" ]]; then
+        cat "$CONFIG_PATH"
+        exit 0
+    fi
+    
+    echo "Usage: cr --config [create|edit|show]" >&2
+    exit 1
+}
+
+load_config() {
+    if [[ -f "$CONFIG_PATH" ]]; then
+        while IFS='=' read -r key value; do
+            [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
+            value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            case "$key" in
+                TL) [[ $CMDLINE_SET_TL -eq 0 ]] && TL="${TL:-$value}" ;;
+                ML) [[ $CMDLINE_SET_ML -eq 0 ]] && ML="${ML:-$value}" ;;
+                VERBOSE) [[ $CMDLINE_SET_VERBOSE -eq 0 ]] && VERBOSE="${VERBOSE:-$value}" ;;
+                TM) [[ $CMDLINE_SET_TM -eq 0 ]] && TM="${TM:-$value}" ;;
+                DEBUG) [[ $CMDLINE_SET_DEBUG -eq 0 ]] && DEBUG="${DEBUG:-$value}" ;;
+                BATCH) [[ $CMDLINE_SET_BATCH -eq 0 ]] && BATCH="${BATCH:-$value}" ;;
+                WATCH) 
+                    if [[ $CMDLINE_SET_WATCH -eq 0 ]]; then 
+                        WATCH="${WATCH:-$value}"
+                    fi 
+                    ;;
+                INPUT_FILE) [[ -z "$INPUT_FILE" ]] && INPUT_FILE="$value" ;;
+                EXPECTED_FILE) [[ -z "$EXPECTED_FILE" ]] && EXPECTED_FILE="$value" ;;
+                OUTPUT_FILE) [[ -z "$OUTPUT_FILE" ]] && OUTPUT_FILE="$value" ;;
+                TEMPLATE) [[ -z "$TEMPLATE_FLAG" ]] && TEMPLATE_FLAG="$value" ;;
+            esac
+        done < "$CONFIG_PATH"
+    fi
+}
+
+do_uninstall() {
+    local install_path
+    install_path=$(command -v cr 2>/dev/null || true)
+    
+    if [[ -z "$install_path" ]]; then
+        echo "cr not found in PATH" >&2
+        exit 1
+    fi
+    
+    local cr_dir
+    cr_dir=$(dirname "$install_path")
+    
+    if [[ "$cr_dir" == "/usr/local/bin" ]]; then
+        echo "Found installation in /usr/local/bin"
+        echo "Run: sudo rm /usr/local/bin/{cr,meminfo}"
+        exit 0
+    fi
+    
+    if [[ "$cr_dir" == "$HOME/.local/bin" ]]; then
+        read -p "Remove from ~/.local/bin? (y/n): " confirm
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+            rm -f "$HOME/.local/bin/cr" "$HOME/.local/bin/meminfo"
+            echo "Uninstalled from ~/.local/bin"
+        fi
+        exit 0
+    fi
+    
+    echo "Installation location: $cr_dir"
+    echo "Manual removal required"
+}
+
+do_template() {
+    local target="$1"
+    local ext
+    ext="$(get_ext "$target")"
+    
+    if [[ ! -d "$TEMPLATE_DIR" ]]; then
+        echo "Template directory not found: $TEMPLATE_DIR" >&2
+        exit 1
+    fi
+    
+    local template_file=""
+    local template_name="main.$ext"
+    
+    if [[ -f "${TEMPLATE_DIR}/${template_name}" ]]; then
+        template_file="${TEMPLATE_DIR}/${template_name}"
+    elif [[ -f "${TEMPLATE_DIR}/main.${ext}" ]]; then
+        template_file="${TEMPLATE_DIR}/main.${ext}"
+    else
+        echo "Template not found: $template_name" >&2
+        echo "Available templates in $TEMPLATE_DIR:"
+        ls -1 "$TEMPLATE_DIR" 2>/dev/null || echo "  (none)"
+        exit 1
+    fi
+    
+    if [[ -f "$target" ]]; then
+        echo "File already exists: $target" >&2
+        exit 1
+    fi
+    
+    cp "$template_file" "$target"
+    echo "Created: $target (from template)"
+}
+
+show_help() {
+    cat << 'EOF'
+FastCR - Fast Competitive Programming Tool
+
+Usage: cr [flags] <file>
+
+Flags:
+  --t           Use input.txt as stdin
+  --i <file>    Custom input file
+  --o <file>    Output to file
+  --e <file>    Compare vs expected output
+  --b           Batch test all test*.txt files
+  --d           Debug build (sanitizers enabled)
+  --tl <ms>     Time limit in milliseconds (default 2000)
+  --ml <MB>     Memory limit in MB (default 256)
+  --v           Verbose compile output
+  --tm          Show last run stats
+  --n <file>    Generate boilerplate file
+  --w           Watch mode
+  --cp          Copy source to clipboard
+  --del <file>  Cleanup binaries
+  --config <action>  Config file: create, edit, show
+  --uninstall   Uninstall FastCR
+  --template <file>  Create file from template
+  --help        Show this help message
+  --version     Show version info
+  -h            Short help flag
+
+Examples:
+  cr solution.cpp
+  cr --t solution.cpp
+  cr --i in.txt --e out.txt sol.cpp
+  cr --b sol.cpp --tl 1000
+  cr --n prob.cpp
+  cr --w solution.cpp
+  cr --config edit
+EOF
+}
+
+show_version() {
+    echo "FastCR v1.0.0 (BETA)"
+}
+
 run_with_flags() {
     local src="$1"
     local result
@@ -572,6 +799,34 @@ do_batch() {
 }
 
 # Main logic
+if [[ $HELP -eq 1 ]]; then
+    show_help
+    exit 0
+fi
+
+if [[ $VERSION -eq 1 ]]; then
+    show_version
+    exit 0
+fi
+
+if [[ $UNINSTALL -eq 1 ]]; then
+    do_uninstall
+    exit 0
+fi
+
+if [[ -n "$CONFIG_FILE" ]]; then
+    load_config
+    do_config "$CONFIG_FILE"
+    exit 0
+fi
+
+load_config
+
+if [[ -n "$TEMPLATE_FLAG" ]]; then
+    do_template "$TEMPLATE_FLAG"
+    exit 0
+fi
+
 if [[ -n "$NEW_FILE" ]]; then
     do_new_file
     exit 0

@@ -18,6 +18,12 @@ chmod +x "${TARGET_DIR}/cr"
 cp "${SCRIPT_DIR}/src/meminfo" "${TARGET_DIR}/meminfo"
 chmod +x "${TARGET_DIR}/meminfo"
 
+if [[ -d "${SCRIPT_DIR}/Templates" ]]; then
+    TEMPLATE_TARGET="${TARGET_DIR}/Templates"
+    mkdir -p "$TEMPLATE_TARGET"
+    cp "${SCRIPT_DIR}/Templates/"* "$TEMPLATE_TARGET/"
+fi
+
 if [[ "$TARGET_DIR" != "/usr/local/bin" ]]; then
     if ! echo "$PATH" | grep -q "$TARGET_DIR"; then
         echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$HOME/.bashrc"
